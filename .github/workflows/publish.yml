@@ -1,0 +1,141 @@
+name: Publish images
+
+# Publishes every image in this repo to GHCR as
+# ghcr.io/nexuslbs/omni-images/<name>.
+#
+# Release = a `v*` tag of THIS repo (semver tags + sha tag + the pinned upstream
+# version tag). Pushes to `main` publish the sha tag only. There is deliberately
+# NO `latest` tag: consumers (omni-deployer/docker-compose.minio.yml) pin the
+# immutable digest of the published image.
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-minio:
+    name: Build + publish minio
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      ref: ${{ steps.image-ref.outputs.ref }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The image tag carries the UPSTREAM MinIO version baked into the image,
+      # read out of the Dockerfile so the tag can never drift from the pin.
+      - name: Read pinned upstream MinIO version
+        id: upstream
+        run: |
+          set -euo pipefail
+          version="$(grep -m1 '^ARG MINIO_VERSION=' minio/Dockerfile | cut -d= -f2)"
+          if [ -z "$version" ]; then
+            echo "::error::could not read ARG MINIO_VERSION from minio/Dockerfile" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Pinned upstream MinIO version: $version"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/nexuslbs/omni-images/minio
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=short
+            type=raw,value=${{ steps.upstream.outputs.version }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: minio
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Record the single image ref
+        id: image-ref
+        run: |
+          set -euo pipefail
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep ':sha-' | head -1)
+          echo "ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "### minio image published"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo "digest: ${{ steps.build.outputs.digest }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # HARD GATE - exactly the contract the omni-deployer CI integration job and
+  # every hybrid/deploy host depend on: the published image must be pullable
+  # with NO credentials, and it must expose the interface the deploy uses
+  # (in-container `curl -f http://localhost:9000/minio/health/live` -> 200).
+  verify-public-pull:
+    name: Verify credential-less pull + health interface
+    runs-on: ubuntu-latest
+    needs: [build-minio]
+    permissions:
+      contents: read
+    steps:
+      - name: Pull the published image without credentials
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io 2>/dev/null || true
+          cfg="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          if grep -q 'ghcr.io' "$cfg" 2>/dev/null; then
+            echo "::error::ghcr.io credentials present in $cfg - an anonymous pull would not be proven" >&2
+            cat "$cfg" >&2
+            exit 1
+          fi
+          docker pull "${{ needs.build-minio.outputs.ref }}"
+          echo "== anonymous pull OK =="
+          docker inspect --format '{{index .RepoDigests 0}}' "${{ needs.build-minio.outputs.ref }}"
+
+      - name: Smoke-test the interface the deploy relies on
+        run: |
+          set -euo pipefail
+          REF="${{ needs.build-minio.outputs.ref }}"
+          docker run -d --name minio-smoke \
+            -e MINIO_ROOT_USER=smoke -e MINIO_ROOT_PASSWORD=smokepassword \
+            -p 127.0.0.1:9000:9000 "$REF"
+          ok=0
+          for i in $(seq 1 30); do
+            # Exactly what docker-compose.minio.yml's healthcheck and
+            # deploy.py's readiness probe exec inside the container.
+            if docker exec minio-smoke curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "in-container curl -f /minio/health/live -> 200 (attempt ${i})"
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          docker logs minio-smoke 2>&1 | tail -20 || true
+          docker rm -f minio-smoke >/dev/null || true
+          if [ "$ok" != "1" ]; then
+            echo "::error::minio never answered /minio/health/live" >&2
+            exit 1
+          fi
