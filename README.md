@@ -12,29 +12,39 @@ Every image in this repo:
   `ghcr.io/nexuslbs/omni-images/<name>`,
 * is **public** (pullable with no credentials) - the deploy's CI runner and any
   deploy host pull it anonymously,
-* is consumed **by digest** (immutable) from the deploy repos, never by a
-  floating tag and never with a `:latest` base image.
+* is published with **BOTH tags** (operator correction 2026-09-26, telegram
+  threads 3165/3166): `latest` (the rolling alias) **and** the version tag
+  (the immutable ref consumers may pin). Consumers that need immutability pin
+  the version tag or the digest; `latest` is the rolling alias.
 
 ## Images
 
 | Directory | GHCR package | Consumed by |
 |---|---|---|
+| [`browser/`](browser/README.md) | `ghcr.io/nexuslbs/omni-images/browser` | the `browser` compose service of omni-stack / omni-root (CDP endpoint the workstation/workbench `browser-use-playwright` provider attaches to) |
+| [`workstation-tools/`](workstation-tools/README.md) | `ghcr.io/nexuslbs/omni-images/workstation-tools` | the `workstation-tools` compose service of omni-stack / omni-root (himalaya + the general tool set the workstation execs into) |
 | [`minio/`](minio/README.md) | `ghcr.io/nexuslbs/omni-images/minio` | `omni-deployer/docker-compose.minio.yml` (local S3 endpoint for the deploy's S3 backup/restore/checkpoint test) |
 
 ## Publish workflow
 
-`.github/workflows/publish.yml` builds every image on a **`v*` tag** (that is
-this repo's own release tag) and on pushes to `main`, and pushes it to GHCR
-with these tags:
+`.github/workflows/publish.yml` publishes **tag-only** - an image is built and
+pushed ONLY when a tag of its own prefix is pushed:
 
-* `{{version}}`, `{{major}}.{{minor}}`, `{{major}}` from the repo release tag
-  (e.g. tag `v1.0.0` -> `1.0.0`, `1.0`, `1`),
-* `sha-<short>` - the exact commit the image was built from,
-* `<upstream version>` - the pinned upstream version baked into the image
-  (read out of the image's Dockerfile at build time).
+| Pushed tag | Published image | Tags pushed to GHCR |
+|---|---|---|
+| `browser-<version>` | `ghcr.io/nexuslbs/omni-images/browser` | `:<version>` + `:latest` |
+| `workstation-tools-<version>` | `ghcr.io/nexuslbs/omni-images/workstation-tools` | `:<version>` + `:latest` |
+| `minio-<version>` | `ghcr.io/nexuslbs/omni-images/minio` | `:<version>` + `:latest` |
 
-There is deliberately **no `latest` tag**: consumers pin the immutable digest.
+The image version is the git tag with the prefix stripped (`browser-0.0.4` ->
+`browser:0.0.4`). **There is NO publish on a plain `main` push** (the old
+sha-tag publish on main is gone) and no manual dispatch: a tag push is the only
+way an image is published.
 
-The workflow's last job re-pulls the just-published image **without
-credentials** and prints its digest - that anonymous pull is the upstream
-contract the deploy depends on, so it is verified on every publish.
+Every publish job builds the image **once**, smoke-tests the built image against
+the interface the consumers rely on (browser: CDP `/json/version`; workstation-
+tools: himalaya + the tool set present and the container up; minio:
+`/minio/health/live`), pushes the **tested** image under both tags, and then
+re-pulls the just-published image **without credentials** and prints its digest -
+that anonymous pull is the upstream contract the deploy depends on, so it is
+verified on every publish.

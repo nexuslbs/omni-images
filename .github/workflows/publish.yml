@@ -3,107 +3,175 @@ name: Publish images
 # Publishes every image in this repo to GHCR as
 # ghcr.io/nexuslbs/omni-images/<name>.
 #
-# Release = a `v*` tag of THIS repo (semver tags + sha tag + the pinned upstream
-# version tag). Pushes to `main` publish the sha tag only. There is deliberately
-# NO `latest` tag: consumers (omni-deployer/docker-compose.minio.yml) pin the
-# immutable digest of the published image.
+# TAG-ONLY, latest + version (operator correction 2026-09-26, telegram threads
+# 3165 + 3166): an image is published ONLY when a tag of ITS OWN prefix is
+# pushed - `browser-*` publishes the browser image, `workstation-tools-*` the
+# workstation-tools image, `minio-*` the minio image. The image version is the
+# tag with the prefix stripped (`browser-0.0.4` -> `browser:0.0.4`). EVERY
+# published image gets BOTH tags: `latest` (the rolling alias) AND the version
+# tag (the immutable ref consumers may pin). There is NO publish on plain `main`
+# pushes (the old sha-tag publish on main is gone) and no `workflow_dispatch`.
 
 on:
   push:
-    branches:
-      - main
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'browser-*'
+      - 'workstation-tools-*'
+      - 'minio-*'
 
 permissions:
   contents: read
 
 jobs:
-  build-minio:
-    name: Build + publish minio
+  publish:
+    name: Build + publish ${{ matrix.image }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: browser
+            prefix: browser-
+            context: browser
+          - image: workstation-tools
+            prefix: workstation-tools-
+            context: workstation-tools
+          - image: minio
+            prefix: minio-
+            context: minio
     permissions:
       contents: read
       packages: write
-    outputs:
-      ref: ${{ steps.image-ref.outputs.ref }}
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # The image tag carries the UPSTREAM MinIO version baked into the image,
-      # read out of the Dockerfile so the tag can never drift from the pin.
-      - name: Read pinned upstream MinIO version
-        id: upstream
+      # The image version is derived from the tag: `browser-0.0.4` -> 0.0.4.
+      # Every matrix entry runs on every tag push; entries whose prefix does not
+      # match the pushed tag skip (exit 0, nothing to publish for that image).
+      - name: Resolve the image version from the tag
+        id: version
         run: |
           set -euo pipefail
-          version="$(grep -m1 '^ARG MINIO_VERSION=' minio/Dockerfile | cut -d= -f2)"
-          if [ -z "$version" ]; then
-            echo "::error::could not read ARG MINIO_VERSION from minio/Dockerfile" >&2
+          REF="${GITHUB_REF_NAME}"
+          PREFIX="${{ matrix.prefix }}"
+          case "$REF" in
+            ${PREFIX}*) VERSION="${REF#${PREFIX}}" ;;
+            *)
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+          esac
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$REF' does not carry a version (expected ${PREFIX}X.Y.Z)"
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Pinned upstream MinIO version: $version"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "publishing ghcr.io/nexuslbs/omni-images/${{ matrix.image }}:${VERSION} and :latest"
+
+      - name: Skip (tag is not for this image)
+        if: steps.version.outputs.skip == 'true'
+        run: echo "tag ${{ github.ref_name }} is not a ${{ matrix.prefix }} tag; nothing to publish for ${{ matrix.image }}"
+
+      - name: Build the image (no push)
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          docker build -t "${{ matrix.image }}:local" "${{ matrix.context }}"
+          docker image inspect --format '{{.Id}} {{.RepoTags}}' "${{ matrix.image }}:local"
+
+      # The image is only worth publishing if the interface it promises really
+      # answers: run it and require the interface. A build-only job would publish
+      # an image nobody knows is usable.
+      - name: Smoke-test the built image (interface must answer)
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          case "${{ matrix.image }}" in
+            browser)
+              # CDP endpoint: what the workstation/workbench provider attaches to.
+              docker run -d --name smoke -p 9222:9222 "${{ matrix.image }}:local"
+              ok=0
+              for i in $(seq 1 60); do
+                if curl -fsS http://127.0.0.1:9222/json/version > /tmp/version.json 2>/dev/null; then
+                  ok=1
+                  break
+                fi
+                sleep 2
+              done
+              docker logs smoke 2>&1 | tail -n 20 || true
+              docker rm -f smoke >/dev/null 2>&1 || true
+              test "$ok" = "1" || { echo "::error::the browser image never answered CDP /json/version"; exit 1; }
+              grep -q '"Browser"' /tmp/version.json
+              echo "OK: browser CDP /json/version answered"
+              ;;
+            workstation-tools)
+              # Tools that RUN AND FINISH, container stays up (sleep infinity).
+              docker run -d --name smoke "${{ matrix.image }}:local"
+              docker exec smoke himalaya --version
+              docker exec smoke sh -c 'command -v himalaya curl wget jq python3 oathtool psql docker'
+              docker rm -f smoke >/dev/null 2>&1 || true
+              echo "OK: workstation-tools ships himalaya + the general tool set"
+              ;;
+            minio)
+              # Exactly what docker-compose.minio.yml's healthcheck and
+              # deploy.py's readiness probe exec inside the container.
+              docker run -d --name smoke \
+                -e MINIO_ROOT_USER=smoke -e MINIO_ROOT_PASSWORD=smokepassword \
+                -p 127.0.0.1:9000:9000 "${{ matrix.image }}:local"
+              ok=0
+              for i in $(seq 1 30); do
+                if docker exec smoke curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+                  ok=1
+                  break
+                fi
+                sleep 2
+              done
+              docker logs smoke 2>&1 | tail -20 || true
+              docker rm -f smoke >/dev/null 2>&1 || true
+              test "$ok" = "1" || { echo "::error::minio never answered /minio/health/live"; exit 1; }
+              echo "OK: minio /minio/health/live answered"
+              ;;
+          esac
 
       - name: Log in to GHCR
+        if: steps.version.outputs.skip != 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/nexuslbs/omni-images/minio
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,format=short
-            type=raw,value=${{ steps.upstream.outputs.version }}
-
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: minio
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Record the single image ref
-        id: image-ref
+      # Push the SAME tested image under BOTH tags: `latest` (rolling alias) and
+      # the version tag (immutable ref consumers may pin).
+      - name: Tag and push :version + :latest
+        if: steps.version.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep ':sha-' | head -1)
-          echo "ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
+          IMAGE="ghcr.io/nexuslbs/omni-images/${{ matrix.image }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          docker tag "${{ matrix.image }}:local" "$IMAGE:$VERSION"
+          docker tag "${{ matrix.image }}:local" "$IMAGE:latest"
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:latest"
+          docker image inspect --format '{{.Id}}' "$IMAGE:$VERSION"
           {
-            echo "### minio image published"
+            echo "### ${{ matrix.image }} image published"
             echo ""
             echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
-            echo "digest: ${{ steps.build.outputs.digest }}"
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:latest"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # HARD GATE - exactly the contract the omni-deployer CI integration job and
-  # every hybrid/deploy host depend on: the published image must be pullable
-  # with NO credentials, and it must expose the interface the deploy uses
-  # (in-container `curl -f http://localhost:9000/minio/health/live` -> 200).
-  verify-public-pull:
-    name: Verify credential-less pull + health interface
-    runs-on: ubuntu-latest
-    needs: [build-minio]
-    permissions:
-      contents: read
-    steps:
-      - name: Pull the published image without credentials
+      # HARD GATE - the upstream contract consumers depend on: the published
+      # image must be pullable with NO credentials.
+      - name: Verify credential-less pull (latest + version)
+        if: steps.version.outputs.skip != 'true'
         run: |
           set -euo pipefail
+          IMAGE="ghcr.io/nexuslbs/omni-images/${{ matrix.image }}"
+          VERSION="${{ steps.version.outputs.version }}"
           docker logout ghcr.io 2>/dev/null || true
           cfg="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
           if grep -q 'ghcr.io' "$cfg" 2>/dev/null; then
@@ -111,31 +179,7 @@ jobs:
             cat "$cfg" >&2
             exit 1
           fi
-          docker pull "${{ needs.build-minio.outputs.ref }}"
+          docker pull "$IMAGE:$VERSION"
+          docker pull "$IMAGE:latest"
           echo "== anonymous pull OK =="
-          docker inspect --format '{{index .RepoDigests 0}}' "${{ needs.build-minio.outputs.ref }}"
-
-      - name: Smoke-test the interface the deploy relies on
-        run: |
-          set -euo pipefail
-          REF="${{ needs.build-minio.outputs.ref }}"
-          docker run -d --name minio-smoke \
-            -e MINIO_ROOT_USER=smoke -e MINIO_ROOT_PASSWORD=smokepassword \
-            -p 127.0.0.1:9000:9000 "$REF"
-          ok=0
-          for i in $(seq 1 30); do
-            # Exactly what docker-compose.minio.yml's healthcheck and
-            # deploy.py's readiness probe exec inside the container.
-            if docker exec minio-smoke curl -sf http://localhost:9000/minio/health/live >/dev/null; then
-              echo "in-container curl -f /minio/health/live -> 200 (attempt ${i})"
-              ok=1
-              break
-            fi
-            sleep 2
-          done
-          docker logs minio-smoke 2>&1 | tail -20 || true
-          docker rm -f minio-smoke >/dev/null || true
-          if [ "$ok" != "1" ]; then
-            echo "::error::minio never answered /minio/health/live" >&2
-            exit 1
-          fi
+          docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$VERSION"

@@ -66,15 +66,17 @@ exposed publicly. Move to a source build of a newer tag if that ever changes.
 
 `ghcr.io/nexuslbs/omni-images/minio` - **public**, no credentials required.
 
-Consumers pin the immutable digest, e.g. in `omni-deployer/docker-compose.minio.yml`:
+Consumers may pin the immutable digest, e.g. in `omni-deployer/docker-compose.minio.yml`:
 
 ```yaml
 image: ghcr.io/nexuslbs/omni-images/minio@sha256:<digest>
 ```
 
-Tags produced per release (see the root README): repo-release semver
-(`1.0.0`, `1.0`, `1`), `sha-<short>`, and the upstream version
-(`RELEASE.2025-09-07T16-13-09Z`). No `latest`.
+Tags produced per release (see the root README, operator correction 2026-09-26):
+`latest` (the rolling alias) **and** the version tag derived from the `minio-*`
+git tag (e.g. `minio-1.0.0` -> `minio:1.0.0`). The upstream version
+(`RELEASE.2025-09-07T16-13-09Z`) stays pinned inside the Dockerfile/README;
+consumers that need immutability pin the digest or the version tag.
 
 ## How to bump
 
@@ -84,9 +86,10 @@ Tags produced per release (see the root README): repo-release semver
    `curl -fsSL https://github.com/minio/minio/releases/download/<version>/minio.linux-amd64.<version>.sha256sum`.
 3. Update `MINIO_VERSION` + `MINIO_SHA256` in `Dockerfile`.
 4. Update the pinned version/sha256 table above.
-5. Tag a new release of this repo (`git tag v1.0.1 && git push origin v1.0.1`);
-   CI builds, verifies the checksum at build time, publishes to GHCR and
-   re-pulls the result anonymously to prove public availability.
+5. Tag a new release of this repo (`git tag minio-1.0.1 && git push origin
+   minio-1.0.1`); CI builds, verifies the checksum at build time, publishes to
+   GHCR as `minio:1.0.1` AND `minio:latest`, and re-pulls the result
+   anonymously to prove public availability.
 6. Update the digest pin in `omni-deployer/docker-compose.minio.yml` to the
    digest CI just printed (or `docker manifest inspect <ref>`), and note the
    bump in the file's provenance comment.
