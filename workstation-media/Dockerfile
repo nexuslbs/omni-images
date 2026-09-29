@@ -29,9 +29,12 @@ RUN apt-get update \
       imagemagick \
  && rm -rf /var/lib/apt/lists/*
 
-# faster-whisper: CPU transcription (CTranslate2). Pinned.
+# faster-whisper: CPU transcription (CTranslate2). Pinned. `requests` is an
+# undeclared runtime import of faster_whisper.utils (model download), so it is
+# pinned explicitly.
 RUN python3 -m pip install --no-cache-dir \
-    faster-whisper==1.1.0
+    faster-whisper==1.1.0 \
+    requests==2.32.3
 
 # NOT a service: stay up for exec-based use, exactly like the
 # workstation-tools container.
