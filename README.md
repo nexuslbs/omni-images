@@ -32,6 +32,10 @@ Every image in this repo:
   such a new image is an existing one becoming too big or too disorganized -
   then it is better to split into more focused images than to keep growing the
   existing one.
+* **Release in the end-of-chain task** (operator policy, telegram 2026-09-29):
+  when such a new image is created, its release (image publish - tag push /
+  CI build) happens in the release/deploy task at the end of the chain, not
+  ad-hoc.
 | Directory | GHCR package | Consumed by |
 |---|---|---|
 | [`browser/`](browser/README.md) | `ghcr.io/nexuslbs/omni-images/browser` | the `browser` compose service of omni-stack / omni-root (CDP endpoint the workstation/workbench `browser-use-playwright` provider attaches to) |
