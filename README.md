@@ -19,6 +19,19 @@ Every image in this repo:
 
 ## Images
 
+
+## Conventions
+
+* **New focused images live here too** (operator policy, telegram 2026-09-29): if a
+  new focused image is ever needed - e.g. a future `workstation-datasci` - its
+  Dockerfile and README are defined in this repo, exactly like
+  `workstation-tools/`, with its own GHCR package
+  (`ghcr.io/nexuslbs/omni-images/<name>`), its own tag prefix in
+  `.github/workflows/publish.yml` and its own version tag.
+* **Split, don't grow** (operator policy, telegram 2026-09-29): the trigger for
+  such a new image is an existing one becoming too big or too disorganized -
+  then it is better to split into more focused images than to keep growing the
+  existing one.
 | Directory | GHCR package | Consumed by |
 |---|---|---|
 | [`browser/`](browser/README.md) | `ghcr.io/nexuslbs/omni-images/browser` | the `browser` compose service of omni-stack / omni-root (CDP endpoint the workstation/workbench `browser-use-playwright` provider attaches to) |
