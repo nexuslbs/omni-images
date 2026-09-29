@@ -26,6 +26,12 @@ Every image in this repo:
   new focused image is ever needed - e.g. a future `workstation-datasci` - its
   Dockerfile and README are defined in this repo, exactly like
   `workstation-tools/`, with its own GHCR package
+* **Dev-overlay build row** (operator policy, telegram 2026-09-29): every new
+  focused image also gets ONE build row with a `local/<name>:latest` tag in
+  `docker-compose.dev.yml` (the dev overlay of omni-root), exactly like
+  `workstation-tools` and `browser` - so it is locally built and tested in
+  omnidev before any release. Never the published ghcr.io name in the dev
+  overlay.
   (`ghcr.io/nexuslbs/omni-images/<name>`), its own tag prefix in
   `.github/workflows/publish.yml` and its own version tag.
 * **Split, don't grow** (operator policy, telegram 2026-09-29): the trigger for
