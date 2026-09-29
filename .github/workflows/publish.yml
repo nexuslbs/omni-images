@@ -17,6 +17,9 @@ on:
     tags:
       - 'browser-*'
       - 'workstation-tools-*'
+      - 'workstation-datasci-*'
+      - 'workstation-office-*'
+      - 'workstation-media-*'
       - 'minio-*'
 
 permissions:
@@ -36,6 +39,15 @@ jobs:
           - image: workstation-tools
             prefix: workstation-tools-
             context: workstation-tools
+          - image: workstation-datasci
+            prefix: workstation-datasci-
+            context: workstation-datasci
+          - image: workstation-office
+            prefix: workstation-office-
+            context: workstation-office
+          - image: workstation-media
+            prefix: workstation-media-
+            context: workstation-media
           - image: minio
             prefix: minio-
             context: minio
@@ -112,6 +124,33 @@ jobs:
               docker exec smoke sh -c 'command -v himalaya curl wget jq python3 oathtool psql docker'
               docker rm -f smoke >/dev/null 2>&1 || true
               echo "OK: workstation-tools ships himalaya + the general tool set"
+              ;;
+            workstation-datasci)
+              # The data-science stack must import and jupyter must answer.
+              docker run -d --name smoke "${{ matrix.image }}:local"
+              docker exec smoke python3 -c "import numpy,pandas,scipy,matplotlib,sklearn; print('ds-ok')"
+              docker exec smoke jupyter --version
+              docker rm -f smoke >/dev/null 2>&1 || true
+              echo "OK: workstation-datasci ships the data-science stack"
+              ;;
+            workstation-office)
+              # Office/OCR CLIs + the Python document libraries must answer.
+              docker run -d --name smoke "${{ matrix.image }}:local"
+              docker exec smoke pandoc --version
+              docker exec smoke tesseract --version
+              docker exec smoke pdftotext -v
+              docker exec smoke python3 -c "import docx,openpyxl,reportlab,pptx,pypdf; print('office-ok')"
+              docker rm -f smoke >/dev/null 2>&1 || true
+              echo "OK: workstation-office ships pandoc/tesseract/poppler + the doc libs"
+              ;;
+            workstation-media)
+              # ffmpeg + imagemagick + the faster-whisper import must answer.
+              docker run -d --name smoke "${{ matrix.image }}:local"
+              docker exec smoke ffmpeg -version
+              docker exec smoke magick -version
+              docker exec smoke python3 -c "from faster_whisper import WhisperModel; print('media-ok')"
+              docker rm -f smoke >/dev/null 2>&1 || true
+              echo "OK: workstation-media ships ffmpeg/imagemagick + faster-whisper"
               ;;
             minio)
               # Exactly what docker-compose.minio.yml's healthcheck and

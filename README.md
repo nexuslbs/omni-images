@@ -46,6 +46,9 @@ Every image in this repo:
 |---|---|---|
 | [`browser/`](browser/README.md) | `ghcr.io/nexuslbs/omni-images/browser` | the `browser` compose service of omni-stack / omni-root (CDP endpoint the workstation/workbench `browser-use-playwright` provider attaches to) |
 | [`workstation-tools/`](workstation-tools/README.md) | `ghcr.io/nexuslbs/omni-images/workstation-tools` | the `workstation-tools` compose service of omni-stack / omni-root (himalaya + the general tool set the workstation execs into) |
+| [`workstation-datasci/`](workstation-datasci/README.md) | `ghcr.io/nexuslbs/omni-images/workstation-datasci` | the `workstation-datasci` compose service (data-science stack: numpy/pandas/scipy/matplotlib/sklearn + jupyter, Debian base) |
+| [`workstation-office/`](workstation-office/README.md) | `ghcr.io/nexuslbs/omni-images/workstation-office` | the `workstation-office` compose service (pandoc, tesseract-ocr, poppler-utils + the Python document libs) |
+| [`workstation-media/`](workstation-media/README.md) | `ghcr.io/nexuslbs/omni-images/workstation-media` | the `workstation-media` compose service (ffmpeg moved out of the main image, imagemagick, faster-whisper) |
 | [`minio/`](minio/README.md) | `ghcr.io/nexuslbs/omni-images/minio` | `omni-deployer/docker-compose.minio.yml` (local S3 endpoint for the deploy's S3 backup/restore/checkpoint test) |
 
 ## Publish workflow
@@ -57,6 +60,9 @@ pushed ONLY when a tag of its own prefix is pushed:
 |---|---|---|
 | `browser-<version>` | `ghcr.io/nexuslbs/omni-images/browser` | `:<version>` + `:latest` |
 | `workstation-tools-<version>` | `ghcr.io/nexuslbs/omni-images/workstation-tools` | `:<version>` + `:latest` |
+| `workstation-datasci-<version>` | `ghcr.io/nexuslbs/omni-images/workstation-datasci` | `:<version>` + `:latest` |
+| `workstation-office-<version>` | `ghcr.io/nexuslbs/omni-images/workstation-office` | `:<version>` + `:latest` |
+| `workstation-media-<version>` | `ghcr.io/nexuslbs/omni-images/workstation-media` | `:<version>` + `:latest` |
 | `minio-<version>` | `ghcr.io/nexuslbs/omni-images/minio` | `:<version>` + `:latest` |
 
 The image version is the git tag with the prefix stripped (`browser-0.0.4` ->
