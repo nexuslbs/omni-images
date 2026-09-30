@@ -1,11 +1,15 @@
-# workstation-office: the office/OCR concern for exec-based use.
+# workstation-office: the office/OCR/render concern for exec-based use.
 #
 # One concern image per domain (operator decision M, gap-analysis report
-# E4/E5 + section 5.4): pandoc, tesseract-ocr + poppler-utils (pdftotext) and
-# the Python document libraries (python-docx/openpyxl/reportlab/pptx/pypdf).
-# LibreOffice stays OUT on purpose (it would blow the 350 MB budget; it gets a
-# separate opt-in image only if a project demonstrably needs ODF/legacy
-# rendering).
+# E4/E5 + section 5.4): pandoc, tesseract-ocr + poppler-utils (pdftotext), the
+# Python document libraries (python-docx/openpyxl/reportlab/pptx/pypdf) and
+# (added 2026-09-30, audit gap G6) the render/PDF toolchain: LibreOffice
+# (ODF/legacy rendering), TeX Live latex/pdflatex, graphviz dot, qpdf,
+# ghostscript gs and plantuml (UML diagrams; pulls default-jre-headless).
+#
+# LibreOffice used to stay OUT on the 350 MB budget; audit gap G6 measured the
+# missing ODF/legacy rendering as a real interface gap, so it is added on
+# purpose now even though it makes the image large (expected).
 #
 # It contains tools/CLIs that RUN AND FINISH - NOT services that keep running
 # permanently. The whole lifecycle is `sleep infinity` (the compose service
@@ -15,20 +19,38 @@
 # general-service seam (`docker compose exec -T workstation-office sh -c ...`
 # or `docker run --rm -i <image> sh -c ...`).
 #
-# Pins (2026-09-29): Debian bookworm apt packages + PyPI cp311 wheels.
+# Pins (2026-09-30): python:3.11-slim (Debian) apt packages + PyPI cp311 wheels.
 
 FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
-# Office/OCR CLIs (Debian bookworm, --no-install-recommends: no doc/locale
-# packages in the runtime stage).
+# Office/OCR/render CLIs (Debian, --no-install-recommends: no
+# doc/locale packages in the runtime stage).
+#   pandoc                     document conversion
+#   tesseract-ocr              OCR engine
+#   poppler-utils              pdftotext / pdfinfo / pdftoppm
+#   libreoffice                ODF/legacy rendering (libreoffice + soffice)
+#   texlive-latex-base         latex + pdflatex
+#   texlive-fonts-recommended  the fonts the LaTeX base expects
+#   graphviz                   dot
+#   qpdf                       PDF structural repair/inspection
+#   ghostscript                gs (PostScript/PDF rendering)
+#   plantuml + default-jre-headless  UML diagrams (plantuml is Java)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       pandoc \
       tesseract-ocr \
       poppler-utils \
+      libreoffice \
+      texlive-latex-base \
+      texlive-fonts-recommended \
+      graphviz \
+      qpdf \
+      ghostscript \
+      plantuml \
+      default-jre-headless \
  && rm -rf /var/lib/apt/lists/*
 
 # The Python document libraries, pinned (cp311 wheels, no build toolchain).

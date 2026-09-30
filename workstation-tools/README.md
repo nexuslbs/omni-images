@@ -3,7 +3,9 @@
 The **external-interaction tooling** image of the omni stack: himalaya (the email
 CLI the workstation's `email-himalaya` capability drives) plus the general Linux
 toolbox package set, "just like omni toolbox" (the package reference is
-`omni-stack/services/toolbox/Dockerfile`).
+`omni-stack/services/toolbox/Dockerfile`), plus (audit gap G6, 2026-09-30) the
+datastore and security-scanner CLIs: mysql, redis-cli, mongosh, zip, gitleaks,
+trivy and semgrep.
 
 It is an image of **tools/CLIs/commands that RUN AND FINISH** - NOT services that
 keep running permanently. The container's default command is `sleep infinity` (or
@@ -27,6 +29,13 @@ versioned image published from THIS repo.
 | himalaya | Alpine package `himalaya` (v1.2.0, apk-managed, `/usr/bin/himalaya`) |
 | oathtool | Alpine package `oath-toolkit-oathtool` (TOTP/HOTP CLI) |
 | pyotp | PyPI `pyotp==2.10.0` (pinned, pure-python TOTP library) |
+| mysql | Alpine `mysql-client` (dummy migration package) -> `mariadb-client` 11.8.8-r0, `/usr/bin/mysql` |
+| redis-cli | Alpine package `redis` (8.8.0-r0; also ships redis-server) |
+| zip | Alpine package `zip` (3.0-r13) |
+| mongosh | Pinned MongoDB CDN tarball `mongosh-2.12.0-linux-x64.tgz`, sha256 `aa42cb826b7b8e655c5481293f5365ddaf1a23e43af07520326e5bbc957838ad`; glibc binary run through `gcompat` + the checked-in `mongosh-resolv-shim.c` |
+| gitleaks | Pinned GitHub binary `v8.30.1` linux_x64, sha256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb` |
+| trivy | Pinned GitHub binary `v0.74.0` Linux-64bit, sha256 `2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a` |
+| semgrep | PyPI `semgrep==1.178.0` (musllinux wheel with bundled semgrep-core) |
 | General set | `bash tini dcron curl wget rclone postgresql-client postgresql docker-cli docker-compose python3 py3-pip py3-psycopg2 jq` (the toolbox package reference) |
 
 The image carries **NO entrypoint scripts and NO service**: `CMD ["sleep",
@@ -56,6 +65,8 @@ required. Each publish produces BOTH tags (operator correction 2026-09-26):
 * `himalaya` on PATH (`/usr/bin/himalaya`, v1 syntax: `account list -o json`,
   `envelope list -o json --page-size N`),
 * the general tool set (curl, jq, python3, oathtool, docker CLI, psql, ...),
+* the datastore/scanner CLIs: `mysql`, `redis-cli`, `mongosh`, `zip`,
+  `gitleaks`, `trivy`, `semgrep`,
 * the container stays UP (`sleep infinity`) so `docker compose exec -T
   workstation-tools sh -c <cmd>` works at any time.
 
@@ -66,13 +77,23 @@ docker build -t omni-images/workstation-tools:test .
 docker run -d --name wst-smoke omni-images/workstation-tools:test
 docker exec wst-smoke himalaya --version
 docker exec wst-smoke sh -c 'command -v curl jq python3 oathtool psql docker'
+docker exec wst-smoke sh -c 'command -v mysql redis-cli mongosh zip gitleaks trivy semgrep'
+docker exec wst-smoke mysql --version
+docker exec wst-smoke redis-cli --version
+docker exec wst-smoke mongosh --version
+docker exec wst-smoke zip -v
+docker exec wst-smoke gitleaks version
+docker exec wst-smoke trivy --version
+docker exec wst-smoke semgrep --version
 docker rm -f wst-smoke
 ```
 
 ## How to bump
 
-1. Bump the pinned pieces: `pyotp==<version>` in the Dockerfile (himalaya and the
-   apk set are apk-managed; the Alpine package versions follow the base image).
+1. Bump the pinned pieces in the Dockerfile: `pyotp==<version>`,
+   `semgrep==<version>`, and the `MONGSH_*`/`GITLEAKS_*`/`TRIVY_*` build args
+   (himalaya and the rest of the apk set are apk-managed; the Alpine package
+   versions follow the base image).
 2. Update the pinned-source table above.
 3. Tag a new release of this repo (`git tag workstation-tools-0.0.2 && git push
    origin workstation-tools-0.0.2`); CI builds, publishes

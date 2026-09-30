@@ -121,9 +121,17 @@ jobs:
               # Tools that RUN AND FINISH, container stays up (sleep infinity).
               docker run -d --name smoke "${{ matrix.image }}:local"
               docker exec smoke himalaya --version
-              docker exec smoke sh -c 'command -v himalaya curl wget jq python3 oathtool psql docker'
+              docker exec smoke sh -c 'for t in himalaya curl wget jq python3 oathtool psql docker; do command -v "$t" || exit 1; done'
+              docker exec smoke sh -c 'for t in mysql redis-cli mongosh zip gitleaks trivy semgrep; do command -v "$t" || exit 1; done'
+              docker exec smoke mysql --version
+              docker exec smoke redis-cli --version
+              docker exec smoke mongosh --version
+              docker exec smoke zip -v
+              docker exec smoke gitleaks version
+              docker exec smoke trivy --version
+              docker exec smoke semgrep --version
               docker rm -f smoke >/dev/null 2>&1 || true
-              echo "OK: workstation-tools ships himalaya + the general tool set"
+              echo "OK: workstation-tools ships himalaya + the general tool set + mysql/redis-cli/mongosh/zip/gitleaks/trivy/semgrep"
               ;;
             workstation-datasci)
               # The data-science stack must import and jupyter must answer.
@@ -134,23 +142,34 @@ jobs:
               echo "OK: workstation-datasci ships the data-science stack"
               ;;
             workstation-office)
-              # Office/OCR CLIs + the Python document libraries must answer.
+              # Office/OCR/render CLIs + the Python document libraries must answer.
               docker run -d --name smoke "${{ matrix.image }}:local"
               docker exec smoke pandoc --version
               docker exec smoke tesseract --version
               docker exec smoke pdftotext -v
               docker exec smoke python3 -c "import docx,openpyxl,reportlab,pptx,pypdf; print('office-ok')"
+              docker exec smoke sh -c 'for t in libreoffice soffice latex pdflatex dot plantuml qpdf gs; do command -v "$t" || exit 1; done'
+              docker exec smoke libreoffice --version
+              docker exec smoke latex --version
+              docker exec smoke dot -V
+              docker exec smoke qpdf --version
+              docker exec smoke gs --version
+              docker exec smoke plantuml -version
               docker rm -f smoke >/dev/null 2>&1 || true
-              echo "OK: workstation-office ships pandoc/tesseract/poppler + the doc libs"
+              echo "OK: workstation-office ships pandoc/tesseract/poppler + the doc libs + libreoffice/texlive/graphviz/qpdf/gs/plantuml"
               ;;
             workstation-media)
-              # ffmpeg + imagemagick + the faster-whisper import must answer.
+              # ffmpeg + imagemagick + sox + the faster-whisper import and the
+              # `whisper` CLI must answer.
               docker run -d --name smoke "${{ matrix.image }}:local"
               docker exec smoke ffmpeg -version
               docker exec smoke magick -version
               docker exec smoke python3 -c "from faster_whisper import WhisperModel; print('media-ok')"
+              docker exec smoke sh -c 'for t in sox whisper ffmpeg magick; do command -v "$t" || exit 1; done'
+              docker exec smoke sox --version
+              docker exec smoke whisper --help
               docker rm -f smoke >/dev/null 2>&1 || true
-              echo "OK: workstation-media ships ffmpeg/imagemagick + faster-whisper"
+              echo "OK: workstation-media ships ffmpeg/imagemagick/sox + faster-whisper + the whisper CLI"
               ;;
             minio)
               # Exactly what docker-compose.minio.yml's healthcheck and

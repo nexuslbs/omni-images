@@ -1,10 +1,12 @@
 # workstation-office (nexuslbs/omni-images)
 
-The **office/OCR concern** image of the workstation equipment layer
-(gap-analysis report E4/E5, operator decision D/M): pandoc, tesseract-ocr +
-poppler-utils (pdftotext) and the Python document libraries
-(python-docx/openpyxl/reportlab/pptx/pypdf) for producing and parsing
-docx/xlsx/pptx/PDF artifacts and OCR-ing scanned documents.
+The **office/OCR/render concern** image of the workstation equipment layer
+(gap-analysis report E4/E5, operator decision D/M; audit gap G6 added
+2026-09-30): pandoc, tesseract-ocr + poppler-utils (pdftotext) and the Python
+document libraries (python-docx/openpyxl/reportlab/pptx/pypdf) for producing
+and parsing docx/xlsx/pptx/PDF artifacts and OCR-ing scanned documents, plus
+the render/PDF toolchain: LibreOffice (ODF/legacy), TeX Live latex/pdflatex,
+graphviz `dot`, qpdf, ghostscript `gs` and plantuml.
 
 It is an image of **tools/CLIs/commands that RUN AND FINISH** - NOT services
 that keep running permanently. The container's default command is `sleep
@@ -13,20 +15,27 @@ workstation's `container` transport (docker-impl) runs
 `docker compose exec -T workstation-office sh -c '<cmd>'` into it, or launches
 the image on demand with `docker run --rm -i <image> sh -c '<cmd>'`.
 
-## Why LibreOffice stays OUT
+## Why LibreOffice is IN (audit gap G6)
 
-LibreOffice (~400-700 MB) is the one item that would blow the office budget
-(<= 350 MB, gap-analysis report section 5.4): it stays out unless a project
-demonstrably needs ODF/legacy rendering (then a separate opt-in image).
+LibreOffice (~400-700 MB) used to stay OUT to keep the office budget (<= 350 MB,
+gap-analysis report section 5.4). Audit gap G6 measured the missing ODF/legacy
+rendering as a real interface gap, so the image deliberately grew and now ships
+LibreOffice plus the rest of the render/PDF toolchain.
 
 ## Pinned upstream source
 
 | Field | Value |
 |---|---|
-| Base image | `python:3.11-slim` (Debian bookworm) |
-| pandoc | Debian bookworm apt package (apt-managed) |
-| tesseract-ocr | Debian bookworm apt package (apt-managed) |
-| poppler-utils | Debian bookworm apt package (pdftotext, apt-managed) |
+| Base image | `python:3.11-slim` (Debian; the floating tag currently resolves to Debian 13 trixie) |
+| pandoc | Debian apt package (apt-managed) |
+| tesseract-ocr | Debian apt package (apt-managed) |
+| poppler-utils | Debian apt package (pdftotext, apt-managed) |
+| libreoffice | Debian apt package (ODF/legacy rendering; large, expected) |
+| texlive-latex-base, texlive-fonts-recommended | Debian apt packages (`latex` + `pdflatex`) |
+| graphviz | Debian apt package (`dot`) |
+| qpdf | Debian apt package (PDF repair/inspection) |
+| ghostscript | Debian apt package (`gs`) |
+| plantuml + default-jre-headless | Debian apt packages (plantuml is Java) |
 | python-docx | PyPI `python-docx==1.1.2` (cp311 wheel) |
 | openpyxl | PyPI `openpyxl==3.1.5` (cp311 wheel) |
 | reportlab | PyPI `reportlab==4.2.5` (cp311 wheel) |
@@ -47,6 +56,8 @@ tag (from the `workstation-office-*` git tag).
 ## Interface the workstation relies on
 
 * `pandoc`, `tesseract`, `pdftotext` on PATH,
+* `libreoffice`/`soffice`, `latex`/`pdflatex`, `dot`, `qpdf`, `gs` (ghostscript)
+  and `plantuml` on PATH,
 * `python3` with docx/openpyxl/reportlab/pptx/pypdf importable
   (`python3 -c "import docx,openpyxl,reportlab,pptx,pypdf"`),
 * the container stays UP (`sleep infinity`) so
@@ -60,13 +71,20 @@ docker run -d --name wso-smoke omni-images/workstation-office:test
 docker exec wso-smoke pandoc --version
 docker exec wso-smoke tesseract --version
 docker exec wso-smoke python3 -c "import docx,openpyxl,reportlab,pptx,pypdf; print('ok')"
+docker exec wso-smoke sh -c 'command -v libreoffice soffice latex pdflatex dot plantuml qpdf gs'
+docker exec wso-smoke libreoffice --version
+docker exec wso-smoke latex --version
+docker exec wso-smoke dot -V
+docker exec wso-smoke qpdf --version
+docker exec wso-smoke gs --version
+docker exec wso-smoke plantuml -version
 docker rm -f wso-smoke
 ```
 
 ## How to bump
 
 1. Bump the pinned PyPI versions in the Dockerfile (apt packages follow the
-   bookworm base image).
+   Debian base image of `python:3.11-slim`).
 2. Update the pinned-source table above.
 3. Tag a new release of this repo (`git tag workstation-office-0.0.1 && git
    push origin workstation-office-0.0.1`); CI builds, publishes
