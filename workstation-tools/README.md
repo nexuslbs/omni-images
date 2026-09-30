@@ -5,7 +5,8 @@ CLI the workstation's `email-himalaya` capability drives) plus the general Linux
 toolbox package set, "just like omni toolbox" (the package reference is
 `omni-stack/services/toolbox/Dockerfile`), plus (audit gap G6, 2026-09-30) the
 datastore and security-scanner CLIs: mysql, redis-cli, mongosh, zip, gitleaks,
-trivy and semgrep.
+trivy and semgrep, plus the PDF-verification pair qpdf and poppler-utils
+(`pdfinfo`) so a PDF can be re-verified outside the office container.
 
 It is an image of **tools/CLIs/commands that RUN AND FINISH** - NOT services that
 keep running permanently. The container's default command is `sleep infinity` (or
@@ -32,6 +33,8 @@ versioned image published from THIS repo.
 | mysql | Alpine `mysql-client` (dummy migration package) -> `mariadb-client` 11.8.8-r0, `/usr/bin/mysql` |
 | redis-cli | Alpine package `redis` (8.8.0-r0; also ships redis-server) |
 | zip | Alpine package `zip` (3.0-r13) |
+| qpdf | Alpine package `qpdf` (PDF structural repair/inspection) |
+| poppler-utils | Alpine package `poppler-utils` (`pdfinfo`/`pdftotext`/`pdftoppm`) |
 | mongosh | Pinned MongoDB CDN tarball `mongosh-2.12.0-linux-x64.tgz`, sha256 `aa42cb826b7b8e655c5481293f5365ddaf1a23e43af07520326e5bbc957838ad`; glibc binary run through `gcompat` + the checked-in `mongosh-resolv-shim.c` |
 | gitleaks | Pinned GitHub binary `v8.30.1` linux_x64, sha256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb` |
 | trivy | Pinned GitHub binary `v0.74.0` Linux-64bit, sha256 `2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a` |
@@ -67,6 +70,7 @@ required. Each publish produces BOTH tags (operator correction 2026-09-26):
 * the general tool set (curl, jq, python3, oathtool, docker CLI, psql, ...),
 * the datastore/scanner CLIs: `mysql`, `redis-cli`, `mongosh`, `zip`,
   `gitleaks`, `trivy`, `semgrep`,
+* the PDF-verification pair `qpdf` and `pdfinfo`,
 * the container stays UP (`sleep infinity`) so `docker compose exec -T
   workstation-tools sh -c <cmd>` works at any time.
 
@@ -77,7 +81,7 @@ docker build -t omni-images/workstation-tools:test .
 docker run -d --name wst-smoke omni-images/workstation-tools:test
 docker exec wst-smoke himalaya --version
 docker exec wst-smoke sh -c 'command -v curl jq python3 oathtool psql docker'
-docker exec wst-smoke sh -c 'command -v mysql redis-cli mongosh zip gitleaks trivy semgrep'
+docker exec wst-smoke sh -c 'command -v mysql redis-cli mongosh zip gitleaks trivy semgrep qpdf pdfinfo'
 docker exec wst-smoke mysql --version
 docker exec wst-smoke redis-cli --version
 docker exec wst-smoke mongosh --version
@@ -85,6 +89,8 @@ docker exec wst-smoke zip -v
 docker exec wst-smoke gitleaks version
 docker exec wst-smoke trivy --version
 docker exec wst-smoke semgrep --version
+docker exec wst-smoke qpdf --version
+docker exec wst-smoke pdfinfo -v
 docker rm -f wst-smoke
 ```
 

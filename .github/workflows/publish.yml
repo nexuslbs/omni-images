@@ -122,7 +122,7 @@ jobs:
               docker run -d --name smoke "${{ matrix.image }}:local"
               docker exec smoke himalaya --version
               docker exec smoke sh -c 'for t in himalaya curl wget jq python3 oathtool psql docker; do command -v "$t" || exit 1; done'
-              docker exec smoke sh -c 'for t in mysql redis-cli mongosh zip gitleaks trivy semgrep; do command -v "$t" || exit 1; done'
+              docker exec smoke sh -c 'for t in mysql redis-cli mongosh zip gitleaks trivy semgrep qpdf pdfinfo; do command -v "$t" || exit 1; done'
               docker exec smoke mysql --version
               docker exec smoke redis-cli --version
               docker exec smoke mongosh --version
@@ -130,8 +130,10 @@ jobs:
               docker exec smoke gitleaks version
               docker exec smoke trivy --version
               docker exec smoke semgrep --version
+              docker exec smoke qpdf --version
+              docker exec smoke pdfinfo -v
               docker rm -f smoke >/dev/null 2>&1 || true
-              echo "OK: workstation-tools ships himalaya + the general tool set + mysql/redis-cli/mongosh/zip/gitleaks/trivy/semgrep"
+              echo "OK: workstation-tools ships himalaya + the general tool set + mysql/redis-cli/mongosh/zip/gitleaks/trivy/semgrep/qpdf/pdfinfo"
               ;;
             workstation-datasci)
               # The data-science stack must import and jupyter must answer.
@@ -148,15 +150,16 @@ jobs:
               docker exec smoke tesseract --version
               docker exec smoke pdftotext -v
               docker exec smoke python3 -c "import docx,openpyxl,reportlab,pptx,pypdf; print('office-ok')"
-              docker exec smoke sh -c 'for t in libreoffice soffice latex pdflatex dot plantuml qpdf gs; do command -v "$t" || exit 1; done'
+              docker exec smoke sh -c 'for t in libreoffice soffice latex pdflatex dot plantuml qpdf gs file; do command -v "$t" || exit 1; done'
               docker exec smoke libreoffice --version
               docker exec smoke latex --version
               docker exec smoke dot -V
               docker exec smoke qpdf --version
               docker exec smoke gs --version
               docker exec smoke plantuml -version
+              docker exec smoke file --version
               docker rm -f smoke >/dev/null 2>&1 || true
-              echo "OK: workstation-office ships pandoc/tesseract/poppler + the doc libs + libreoffice/texlive/graphviz/qpdf/gs/plantuml"
+              echo "OK: workstation-office ships pandoc/tesseract/poppler + the doc libs + libreoffice/texlive/graphviz/qpdf/gs/plantuml/file"
               ;;
             workstation-media)
               # ffmpeg + imagemagick + sox + the faster-whisper import and the

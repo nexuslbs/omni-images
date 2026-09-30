@@ -38,6 +38,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   qpdf                       PDF structural repair/inspection
 #   ghostscript                gs (PostScript/PDF rendering)
 #   plantuml + default-jre-headless  UML diagrams (plantuml is Java)
+#   file                       file(1) type identification, for the PDF
+#                              verification interface
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       pandoc \
@@ -50,6 +52,7 @@ RUN apt-get update \
       qpdf \
       ghostscript \
       plantuml \
+      file \
       default-jre-headless \
  && rm -rf /var/lib/apt/lists/*
 

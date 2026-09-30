@@ -6,7 +6,8 @@ The **office/OCR/render concern** image of the workstation equipment layer
 document libraries (python-docx/openpyxl/reportlab/pptx/pypdf) for producing
 and parsing docx/xlsx/pptx/PDF artifacts and OCR-ing scanned documents, plus
 the render/PDF toolchain: LibreOffice (ODF/legacy), TeX Live latex/pdflatex,
-graphviz `dot`, qpdf, ghostscript `gs` and plantuml.
+graphviz `dot`, qpdf, ghostscript `gs`, plantuml and `file` (file(1) type
+identification for the PDF-verification interface).
 
 It is an image of **tools/CLIs/commands that RUN AND FINISH** - NOT services
 that keep running permanently. The container's default command is `sleep
@@ -36,6 +37,7 @@ LibreOffice plus the rest of the render/PDF toolchain.
 | qpdf | Debian apt package (PDF repair/inspection) |
 | ghostscript | Debian apt package (`gs`) |
 | plantuml + default-jre-headless | Debian apt packages (plantuml is Java) |
+| file | Debian apt package (`file` type identification) |
 | python-docx | PyPI `python-docx==1.1.2` (cp311 wheel) |
 | openpyxl | PyPI `openpyxl==3.1.5` (cp311 wheel) |
 | reportlab | PyPI `reportlab==4.2.5` (cp311 wheel) |
@@ -56,8 +58,8 @@ tag (from the `workstation-office-*` git tag).
 ## Interface the workstation relies on
 
 * `pandoc`, `tesseract`, `pdftotext` on PATH,
-* `libreoffice`/`soffice`, `latex`/`pdflatex`, `dot`, `qpdf`, `gs` (ghostscript)
-  and `plantuml` on PATH,
+* `libreoffice`/`soffice`, `latex`/`pdflatex`, `dot`, `qpdf`, `gs` (ghostscript),
+  `plantuml` and `file` on PATH,
 * `python3` with docx/openpyxl/reportlab/pptx/pypdf importable
   (`python3 -c "import docx,openpyxl,reportlab,pptx,pypdf"`),
 * the container stays UP (`sleep infinity`) so
@@ -71,13 +73,14 @@ docker run -d --name wso-smoke omni-images/workstation-office:test
 docker exec wso-smoke pandoc --version
 docker exec wso-smoke tesseract --version
 docker exec wso-smoke python3 -c "import docx,openpyxl,reportlab,pptx,pypdf; print('ok')"
-docker exec wso-smoke sh -c 'command -v libreoffice soffice latex pdflatex dot plantuml qpdf gs'
+docker exec wso-smoke sh -c 'command -v libreoffice soffice latex pdflatex dot plantuml qpdf gs file'
 docker exec wso-smoke libreoffice --version
 docker exec wso-smoke latex --version
 docker exec wso-smoke dot -V
 docker exec wso-smoke qpdf --version
 docker exec wso-smoke gs --version
 docker exec wso-smoke plantuml -version
+docker exec wso-smoke file --version
 docker rm -f wso-smoke
 ```
 

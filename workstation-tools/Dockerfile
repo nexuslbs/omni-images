@@ -12,8 +12,10 @@
 # Package reference: omni-stack/services/toolbox/Dockerfile ("just like omni
 # toolbox"). Pins: himalaya = Alpine apk (v1.2.0), oathtool = Alpine apk,
 # pyotp = PyPI 2.10.0, plus the datastore/scanner CLIs added for audit gap G6
-# (2026-09-30): mysql, redis-cli, mongosh, zip, gitleaks, trivy, semgrep (see
-# README.md for the full table and each pinned source).
+# (2026-09-30): mysql, redis-cli, mongosh, zip, gitleaks, trivy, semgrep, and
+# the PDF-verification pair qpdf + poppler-utils (pdfinfo) for the office
+# pipeline re-run outside the office container (see README.md for the full
+# table and each pinned source).
 
 FROM alpine:latest
 
@@ -25,6 +27,10 @@ FROM alpine:latest
 #   depends on `mariadb-client` (11.8.8-r0), which ships /usr/bin/mysql.
 #   redis-cli: Alpine `redis` package (8.8.0-r0; it also ships redis-server).
 #   zip: Alpine `zip` package.
+#   qpdf: Alpine package (PDF structural repair/inspection).
+#   poppler-utils: Alpine package (pdfinfo/pdftotext/pdftoppm); gives the
+#   tools image an independent pdfinfo so a PDF can be re-verified outside the
+#   office container.
 #   gcompat + libstdc++ + libgcc: needed to run the glibc-linked mongosh build
 #   on Alpine's musl libc (see the mongosh block below).
 RUN apk add --no-cache \
@@ -40,6 +46,8 @@ RUN apk add --no-cache \
     mysql-client \
     redis \
     zip \
+    qpdf \
+    poppler-utils \
     gcompat libstdc++ libgcc
 
 # Pinned versions and checksums for the tools that are NOT in the Alpine repos.
