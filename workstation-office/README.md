@@ -32,7 +32,7 @@ LibreOffice plus the rest of the render/PDF toolchain.
 | tesseract-ocr | Debian apt package (apt-managed) |
 | poppler-utils | Debian apt package (pdftotext, apt-managed) |
 | libreoffice | Debian apt package (ODF/legacy rendering; large, expected) |
-| texlive-latex-base, texlive-fonts-recommended | Debian apt packages (`latex` + `pdflatex`) |
+| texlive-latex-base, texlive-fonts-recommended, texlive-latex-recommended | Debian apt packages (`latex` + `pdflatex`; lmodern + xcolor for pandoc's default LaTeX template) |
 | graphviz | Debian apt package (`dot`) |
 | qpdf | Debian apt package (PDF repair/inspection) |
 | ghostscript | Debian apt package (`gs`) |
