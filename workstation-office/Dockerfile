@@ -34,6 +34,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   libreoffice                ODF/legacy rendering (libreoffice + soffice)
 #   texlive-latex-base         latex + pdflatex
 #   texlive-fonts-recommended  the fonts the LaTeX base expects
+#   lmodern                    Latin Modern (lmodern.sty): pandoc's default
+#                              LaTeX template emits \usepackage{lmodern} for
+#                              T1 fontenc, so pandoc -> pdflatex needs it
 #   graphviz                   dot
 #   qpdf                       PDF structural repair/inspection
 #   ghostscript                gs (PostScript/PDF rendering)
@@ -48,6 +51,7 @@ RUN apt-get update \
       libreoffice \
       texlive-latex-base \
       texlive-fonts-recommended \
+      lmodern \
       graphviz \
       qpdf \
       ghostscript \
