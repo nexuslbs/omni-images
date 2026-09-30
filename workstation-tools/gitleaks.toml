@@ -1,0 +1,59 @@
+# workstation-tools pre-release security gate: custom gitleaks config.
+#
+# SUPERSET of the gitleaks defaults. All built-in rules (github-pat, the
+# marker-based openai-api-key rule, the AWS rules, ...) are loaded from the
+# pinned /etc/gitleaks/gitleaks-defaults.toml, and the shape-based rules below
+# are added on top. The AWS/OpenAI families deliberately have NO allowlist, so
+# the canonical placeholder values are still flagged.
+#
+# WHY [extend] path INSTEAD OF useDefault = true: gitleaks can only APPEND an
+# extended config's global allowlists, never remove an entry (config.extend()
+# in gitleaks v8.30.1 does `c.Allowlists = append(...)`). The embedded default
+# config's global allowlist carries the stopword "abcdefghijklmnopqrstuvwxyz",
+# which silently suppresses the canonical placeholder OpenAI value
+# (sk-demo1234567890abcdefghijklmnopqrstuvwxyz): gitleaks logs
+#   skipping finding: global allowlist allowed-stopword=abcdefghijklmnopqrstuvwxyz
+# and the finding is lost. The image builds
+# /etc/gitleaks/gitleaks-defaults.toml from the pinned v8.30.1 default config
+# (sha256-verified in the Dockerfile) with that single stopword removed, so the
+# extended rule set is otherwise identical to the built-in defaults and the
+# shape-based rules below can still fire. See README.md (Gate section).
+#
+# The gate invokes it by explicit path:
+#   gitleaks detect --config /etc/gitleaks/gitleaks.toml \
+#     --source <repo> --log-opts=--all --report-format=json --report-path=<out>
+title = "workstation-tools gitleaks config (pinned defaults + AWS/OpenAI shape rules)"
+
+[extend]
+path = "/etc/gitleaks/gitleaks-defaults.toml"
+
+# ---------------------------------------------------------------------------
+# Shape-based superset rules (NO allowlist for these families)
+# ---------------------------------------------------------------------------
+
+# AWS access key ID: AKIA followed by exactly 16 uppercase alphanumerics.
+# Catches the canonical example AKIAIOSFODNN7EXAMPLE and any real AKIA key.
+[[rules]]
+id = "aws-access-key-id-strict"
+description = "AWS access key ID (AKIA + 16 uppercase alphanumerics, no allowlist)"
+regex = '''\bAKIA[0-9A-Z]{16}\b'''
+
+# AWS secret access key: a bare 40-char base64-ish token, keyword-gated on
+# aws/secret/access so an arbitrary 40-char string is not flagged. Catches
+# wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY on an AWS_SECRET_ACCESS_KEY line.
+[[rules]]
+id = "aws-secret-access-key"
+description = "AWS secret access key (40-char base64-ish value, keyword-gated)"
+regex = '''\b[A-Za-z0-9/+=]{40}\b'''
+keywords = ["aws", "secret", "access"]
+
+# OpenAI API key: sk- followed by at least 20 token characters. Catches the
+# sk-demo... placeholder and any real OpenAI key shape. This id intentionally
+# matches the built-in marker-based rule; gitleaks merges the two and our regex
+# (a strict superset of the marker shape) wins, so the reported RuleID stays
+# `openai-api-key` while the keyword gate is extended with `sk-`.
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI API key (sk- + 20 or more token characters, no allowlist)"
+regex = '''\bsk-[A-Za-z0-9_\-]{20,}\b'''
+keywords = ["sk-"]

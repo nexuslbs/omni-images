@@ -33,8 +33,12 @@ FROM alpine:latest
 #   office container.
 #   gcompat + libstdc++ + libgcc: needed to run the glibc-linked mongosh build
 #   on Alpine's musl libc (see the mongosh block below).
+#   git: required by gitleaks git-history mode. `gitleaks detect --log-opts=--all`
+#   shells out to git; without it gitleaks FTLs with
+#   "exec: git: executable file not found in $PATH" (pre-release gate gap).
 RUN apk add --no-cache \
     bash tini dcron curl wget \
+    git \
     rclone \
     postgresql-client postgresql \
     docker-cli docker-compose \
@@ -59,6 +63,10 @@ ARG MONGSH_VERSION=2.12.0
 ARG MONGSH_SHA256=aa42cb826b7b8e655c5481293f5365ddaf1a23e43af07520326e5bbc957838ad
 ARG GITLEAKS_VERSION=8.30.1
 ARG GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+# sha256 of the gitleaks v8.30.1 default config at
+# https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/config/gitleaks.toml
+# (consumed by the gate config block below).
+ARG GITLEAKS_DEFAULT_CONFIG_SHA256=e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf
 ARG TRIVY_VERSION=0.74.0
 ARG TRIVY_SHA256=2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
 ARG SEMGREP_VERSION=1.178.0
@@ -100,6 +108,27 @@ RUN set -eux; \
     echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -; \
     tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks; \
     rm -f /tmp/gitleaks.tar.gz
+
+# The pre-release gate config. gitleaks.toml extends a pinned copy of the
+# gitleaks default config (extended by path) plus the shape-based AWS/OpenAI
+# rules. The default base is fetched at build time from the SAME pinned release
+# and has exactly ONE modification: the global allowlist stopword
+# "abcdefghijklmnopqrstuvwxyz" is removed. gitleaks' [extend] mechanism only
+# APPENDS an extended config's global allowlists (config.extend() in v8.30.1
+# does `c.Allowlists = append(...)`), so `useDefault = true` can never
+# un-allowlist that stopword and the canonical placeholder OpenAI value
+# (sk-demo1234567890abcdefghijklmnopqrstuvwxyz) would be silently suppressed
+# (confirmed with `gitleaks detect -l trace`). Installed under /etc/gitleaks/
+# so both files are addressable when gitleaks runs from an arbitrary CWD:
+#   gitleaks detect --config /etc/gitleaks/gitleaks.toml ...
+RUN set -eux; \
+    mkdir -p /etc/gitleaks; \
+    curl -fsSL -o /etc/gitleaks/gitleaks-defaults.toml \
+      "https://raw.githubusercontent.com/gitleaks/gitleaks/v${GITLEAKS_VERSION}/config/gitleaks.toml"; \
+    echo "${GITLEAKS_DEFAULT_CONFIG_SHA256}  /etc/gitleaks/gitleaks-defaults.toml" | sha256sum -c -; \
+    sed -i '/^    "abcdefghijklmnopqrstuvwxyz",$/d' /etc/gitleaks/gitleaks-defaults.toml; \
+    ! grep -q '^    "abcdefghijklmnopqrstuvwxyz",$' /etc/gitleaks/gitleaks-defaults.toml
+COPY gitleaks.toml /etc/gitleaks/gitleaks.toml
 
 # trivy: not in the Alpine repos. Pinned GitHub release binary, sha256-verified
 # against the release's published checksums.txt.

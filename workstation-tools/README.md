@@ -6,7 +6,9 @@ toolbox package set, "just like omni toolbox" (the package reference is
 `omni-stack/services/toolbox/Dockerfile`), plus (audit gap G6, 2026-09-30) the
 datastore and security-scanner CLIs: mysql, redis-cli, mongosh, zip, gitleaks,
 trivy and semgrep, plus the PDF-verification pair qpdf and poppler-utils
-(`pdfinfo`) so a PDF can be re-verified outside the office container.
+(`pdfinfo`) so a PDF can be re-verified outside the office container. Since
+v0.0.11 it also ships `git` (required by gitleaks git-history mode) and the
+pre-release security-gate config at `/etc/gitleaks/gitleaks.toml`.
 
 It is an image of **tools/CLIs/commands that RUN AND FINISH** - NOT services that
 keep running permanently. The container's default command is `sleep infinity` (or
@@ -35,6 +37,8 @@ versioned image published from THIS repo.
 | zip | Alpine package `zip` (3.0-r13) |
 | qpdf | Alpine package `qpdf` (PDF structural repair/inspection) |
 | poppler-utils | Alpine package `poppler-utils` (`pdfinfo`/`pdftotext`/`pdftoppm`) |
+| git | Alpine package `git` (required by gitleaks git-history mode: `gitleaks detect --log-opts=--all` shells out to git) |
+| gitleaks config | `gitleaks.toml` in this directory, copied to `/etc/gitleaks/gitleaks.toml`; the default base `/etc/gitleaks/gitleaks-defaults.toml` is generated at build time from the pinned gitleaks release (see the gate section below) |
 | mongosh | Pinned MongoDB CDN tarball `mongosh-2.12.0-linux-x64.tgz`, sha256 `aa42cb826b7b8e655c5481293f5365ddaf1a23e43af07520326e5bbc957838ad`; glibc binary run through `gcompat` + the checked-in `mongosh-resolv-shim.c` |
 | gitleaks | Pinned GitHub binary `v8.30.1` linux_x64, sha256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb` |
 | trivy | Pinned GitHub binary `v0.74.0` Linux-64bit, sha256 `2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a` |
@@ -70,9 +74,54 @@ required. Each publish produces BOTH tags (operator correction 2026-09-26):
 * the general tool set (curl, jq, python3, oathtool, docker CLI, psql, ...),
 * the datastore/scanner CLIs: `mysql`, `redis-cli`, `mongosh`, `zip`,
   `gitleaks`, `trivy`, `semgrep`,
+* `git` on PATH (so gitleaks git-history mode works),
+* the pre-release gate config `/etc/gitleaks/gitleaks.toml` (and its pinned
+  base `/etc/gitleaks/gitleaks-defaults.toml`),
 * the PDF-verification pair `qpdf` and `pdfinfo`,
 * the container stays UP (`sleep infinity`) so `docker compose exec -T
   workstation-tools sh -c <cmd>` works at any time.
+
+## Pre-release security gate (gitleaks)
+
+The image ships a **custom gitleaks config** at `/etc/gitleaks/gitleaks.toml`
+that is a **superset** of the gitleaks defaults. It loads every built-in rule
+(including the marker-based `openai-api-key` rule and `github-pat`) from the
+pinned `/etc/gitleaks/gitleaks-defaults.toml` and adds three shape-based rules
+with **no allowlist**, so the canonical placeholder values are still flagged:
+
+| Rule ID | Shape |
+|---|---|
+| `aws-access-key-id-strict` | `\bAKIA[0-9A-Z]{16}\b` (e.g. `AKIAIOSFODNN7EXAMPLE`) |
+| `aws-secret-access-key` | `\b[A-Za-z0-9/+=]{40}\b`, keyword-gated on `aws`/`secret`/`access` (e.g. `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`) |
+| `openai-api-key` | `\bsk-[A-Za-z0-9_\-]{20,}\b` (e.g. `sk-demo...`) |
+
+The gate command (git-history mode, so `git` must be present, which it is since
+v0.0.11):
+
+```sh
+gitleaks detect \
+  --config /etc/gitleaks/gitleaks.toml \
+  --source /path/to/repo \
+  --log-opts=--all \
+  --report-format=json \
+  --report-path=/tmp/gitleaks-report.json
+```
+
+`gitleaks-defaults.toml` is built from the gitleaks **v8.30.1** default config
+(`https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/config/gitleaks.toml`,
+sha256-verified in the Dockerfile) with exactly one modification: the global
+allowlist stopword `abcdefghijklmnopqrstuvwxyz` is removed. gitleaks' `[extend]`
+mechanism only appends an extended config's global allowlists (`config.extend()`
+in v8.30.1 does `c.Allowlists = append(...)`), so `useDefault = true` can never
+un-allowlist that stopword, and the canonical placeholder OpenAI value
+(`sk-demo1234567890abcdefghijklmnopqrstuvwxyz`) would be silently suppressed.
+The custom config therefore extends the pinned file by path. A trace run shows
+the suppression this avoids:
+
+```
+DBG extending config with default config
+TRC skipping finding: global allowlist allowed-stopword=abcdefghijklmnopqrstuvwxyz condition=OR finding=sk-demo... rule-id=openai-api-key
+```
 
 ## Local build / verification
 
@@ -81,7 +130,8 @@ docker build -t omni-images/workstation-tools:test .
 docker run -d --name wst-smoke omni-images/workstation-tools:test
 docker exec wst-smoke himalaya --version
 docker exec wst-smoke sh -c 'command -v curl jq python3 oathtool psql docker'
-docker exec wst-smoke sh -c 'command -v mysql redis-cli mongosh zip gitleaks trivy semgrep qpdf pdfinfo'
+docker exec wst-smoke sh -c 'command -v git mysql redis-cli mongosh zip gitleaks trivy semgrep qpdf pdfinfo'
+docker exec wst-smoke git --version
 docker exec wst-smoke mysql --version
 docker exec wst-smoke redis-cli --version
 docker exec wst-smoke mongosh --version
@@ -100,7 +150,11 @@ docker rm -f wst-smoke
    `semgrep==<version>`, and the `MONGSH_*`/`GITLEAKS_*`/`TRIVY_*` build args
    (himalaya and the rest of the apk set are apk-managed; the Alpine package
    versions follow the base image).
-2. Update the pinned-source table above.
+2. Update the pinned-source table above. When `GITLEAKS_VERSION` changes, update
+   the `GITLEAKS_DEFAULT_CONFIG_SHA256` build arg with the sha256 of
+   `https://raw.githubusercontent.com/gitleaks/gitleaks/v<VERSION>/config/gitleaks.toml`
+   (the Dockerfile strips the global allowlist stopword
+   `abcdefghijklmnopqrstuvwxyz` from it at build time).
 3. Tag a new release of this repo (`git tag workstation-tools-0.0.2 && git push
    origin workstation-tools-0.0.2`); CI builds, publishes
    `ghcr.io/nexuslbs/omni-images/workstation-tools:0.0.2` AND `:latest`, and
