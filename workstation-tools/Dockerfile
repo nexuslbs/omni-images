@@ -14,8 +14,11 @@
 # pyotp = PyPI 2.10.0, plus the datastore/scanner CLIs added for audit gap G6
 # (2026-09-30): mysql, redis-cli, mongosh, zip, gitleaks, trivy, semgrep, and
 # the PDF-verification pair qpdf + poppler-utils (pdfinfo) for the office
-# pipeline re-run outside the office container (see README.md for the full
-# table and each pinned source).
+# pipeline re-run outside the office container. Added 2026-10-03 (follow-up of
+# audit gap G6, thread 4017): the database CLI sqlite3 (apk `sqlite`), the
+# YAML/JSON processor yq (apk `yq-go`) and the Node runtime (apk `nodejs`); all
+# three are plain apk packages, so they follow the base image with no pin (see
+# README.md for the full table and each pinned source).
 
 FROM alpine:latest
 
@@ -31,6 +34,14 @@ FROM alpine:latest
 #   poppler-utils: Alpine package (pdfinfo/pdftotext/pdftoppm); gives the
 #   tools image an independent pdfinfo so a PDF can be re-verified outside the
 #   office container.
+#   sqlite3: Alpine `sqlite` package (database CLI at /usr/bin/sqlite3; there
+#   is no package named `sqlite3` and `sqlite-tools` does not ship the binary).
+#   yq: Alpine `yq-go` package (mikefarah Go yq 4.x YAML/JSON processor at
+#   /usr/bin/yq; there is no package named `yq` and `yq-python` is the unrelated
+#   kislyuk jq wrapper, so it is NOT used here).
+#   node: Alpine `nodejs` package (Node runtime at /usr/bin/node; `npm` is a
+#   separate community package and is not required here). Added 2026-10-03 with
+#   sqlite3 and yq as the follow-up of audit gap G6 (thread 4017).
 #   gcompat + libstdc++ + libgcc: needed to run the glibc-linked mongosh build
 #   on Alpine's musl libc (see the mongosh block below).
 #   git: required by gitleaks git-history mode. `gitleaks detect --log-opts=--all`
@@ -45,6 +56,7 @@ RUN apk add --no-cache \
     python3 py3-pip \
     py3-psycopg2 \
     jq \
+    sqlite yq-go nodejs \
     himalaya \
     oath-toolkit-oathtool \
     mysql-client \

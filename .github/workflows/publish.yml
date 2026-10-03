@@ -121,7 +121,7 @@ jobs:
               # Tools that RUN AND FINISH, container stays up (sleep infinity).
               docker run -d --name smoke "${{ matrix.image }}:local"
               docker exec smoke himalaya --version
-              docker exec smoke sh -c 'for t in himalaya curl wget jq python3 oathtool psql docker; do command -v "$t" || exit 1; done'
+              docker exec smoke sh -c 'for t in himalaya curl wget jq python3 oathtool psql docker sqlite3 yq node; do command -v "$t" || exit 1; done'
               docker exec smoke sh -c 'for t in git mysql redis-cli mongosh zip gitleaks trivy semgrep qpdf pdfinfo; do command -v "$t" || exit 1; done'
               docker exec smoke git --version
               docker exec smoke mysql --version
@@ -133,12 +133,15 @@ jobs:
               docker exec smoke semgrep --version
               docker exec smoke qpdf --version
               docker exec smoke pdfinfo -v
+              docker exec smoke sqlite3 --version
+              docker exec smoke yq --version
+              docker exec smoke node --version
               docker exec smoke sh -c 'test -f /etc/gitleaks/gitleaks.toml && test -f /etc/gitleaks/gitleaks-defaults.toml'
               # End-to-end gate proof: git-history mode must run (git present)
               # and the shape-based rule must flag the canonical placeholder.
               docker exec smoke sh -c 'set -e; rm -rf /tmp/gate; mkdir -p /tmp/gate; cd /tmp/gate; git init -q; git config user.email ci@example.com; git config user.name ci; printf "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n" > demo.env; git add demo.env; git commit -qm demo; gitleaks detect --config /etc/gitleaks/gitleaks.toml --source . --log-opts=--all --report-format=json --report-path=/tmp/gate.json --exit-code 0; grep -q aws-access-key-id-strict /tmp/gate.json'
               docker rm -f smoke >/dev/null 2>&1 || true
-              echo "OK: workstation-tools ships himalaya + the general tool set + git + mysql/redis-cli/mongosh/zip/gitleaks/trivy/semgrep/qpdf/pdfinfo and the gate config answers in git-history mode"
+              echo "OK: workstation-tools ships himalaya + the general tool set + git + mysql/redis-cli/mongosh/zip/gitleaks/trivy/semgrep/qpdf/pdfinfo/sqlite3/yq/node and the gate config answers in git-history mode"
               ;;
             workstation-datasci)
               # The data-science stack must import and jupyter must answer.

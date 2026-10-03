@@ -37,6 +37,9 @@ versioned image published from THIS repo.
 | zip | Alpine package `zip` (3.0-r13) |
 | qpdf | Alpine package `qpdf` (PDF structural repair/inspection) |
 | poppler-utils | Alpine package `poppler-utils` (`pdfinfo`/`pdftotext`/`pdftoppm`) |
+| sqlite3 | Alpine package `sqlite` (database CLI, `/usr/bin/sqlite3`; there is no package named `sqlite3` and `sqlite-tools` does not ship the binary) |
+| yq | Alpine package `yq-go` (mikefarah Go yq 4.x YAML/JSON processor, `/usr/bin/yq`; the `yq-python` package is the unrelated jq wrapper and is NOT used) |
+| node | Alpine package `nodejs` (Node runtime, `/usr/bin/node`; `npm` is a separate community package and is not required) |
 | git | Alpine package `git` (required by gitleaks git-history mode: `gitleaks detect --log-opts=--all` shells out to git) |
 | gitleaks config | `gitleaks.toml` in this directory, copied to `/etc/gitleaks/gitleaks.toml`; the default base `/etc/gitleaks/gitleaks-defaults.toml` is generated at build time from the pinned gitleaks release (see the gate section below) |
 | mongosh | Pinned MongoDB CDN tarball `mongosh-2.12.0-linux-x64.tgz`, sha256 `aa42cb826b7b8e655c5481293f5365ddaf1a23e43af07520326e5bbc957838ad`; glibc binary run through `gcompat` + the checked-in `mongosh-resolv-shim.c` |
@@ -74,6 +77,9 @@ required. Each publish produces BOTH tags (operator correction 2026-09-26):
 * the general tool set (curl, jq, python3, oathtool, docker CLI, psql, ...),
 * the datastore/scanner CLIs: `mysql`, `redis-cli`, `mongosh`, `zip`,
   `gitleaks`, `trivy`, `semgrep`,
+* the database CLI `sqlite3`, the YAML/JSON processor `yq` and the `node`
+  runtime (added 2026-10-03, the database/zip/scanner enrichment follow-up of
+  audit gap G6, thread 4017),
 * `git` on PATH (so gitleaks git-history mode works),
 * the pre-release gate config `/etc/gitleaks/gitleaks.toml` (and its pinned
   base `/etc/gitleaks/gitleaks-defaults.toml`),
@@ -141,6 +147,9 @@ docker exec wst-smoke trivy --version
 docker exec wst-smoke semgrep --version
 docker exec wst-smoke qpdf --version
 docker exec wst-smoke pdfinfo -v
+docker exec wst-smoke sqlite3 --version
+docker exec wst-smoke yq --version
+docker exec wst-smoke node --version
 docker rm -f wst-smoke
 ```
 
@@ -149,7 +158,9 @@ docker rm -f wst-smoke
 1. Bump the pinned pieces in the Dockerfile: `pyotp==<version>`,
    `semgrep==<version>`, and the `MONGSH_*`/`GITLEAKS_*`/`TRIVY_*` build args
    (himalaya and the rest of the apk set are apk-managed; the Alpine package
-   versions follow the base image).
+   versions follow the base image). The three added 2026-10-03 tools (`sqlite3`
+   = apk `sqlite`, `yq` = apk `yq-go`, `node` = apk `nodejs`) are apk-managed
+   too, so there is no version pin to bump for them: they follow the base image.
 2. Update the pinned-source table above. When `GITLEAKS_VERSION` changes, update
    the `GITLEAKS_DEFAULT_CONFIG_SHA256` build arg with the sha256 of
    `https://raw.githubusercontent.com/gitleaks/gitleaks/v<VERSION>/config/gitleaks.toml`
